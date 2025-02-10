@@ -78,7 +78,7 @@ export const updateFeedbackQuery = ({ id, apiHost = 'http://localhost:3000', bod
 export const sendMessageQuery = ({ chatflowid, apiHost = 'http://localhost:3000', body, onRequest }: MessageRequest) =>
   sendRequest<any>({
     method: 'POST',
-    url: `${apiHost}/api/v1/prediction/${chatflowid}`,
+    url: `${apiHost}/api/v1/chat_buddy/prediction/${chatflowid}`,
     body,
     onRequest: onRequest,
   });
@@ -108,21 +108,21 @@ export const upsertVectorStoreWithFormData = ({ chatflowid, apiHost = 'http://lo
 export const getChatbotConfig = ({ chatflowid, apiHost = 'http://localhost:3000', onRequest }: MessageRequest) =>
   sendRequest<any>({
     method: 'GET',
-    url: `${apiHost}/api/v1/public-chatbotConfig/${chatflowid}`,
+    url: `${apiHost}/api/v1/chat_buddy/public-chatbotConfig/${chatflowid}`,
     onRequest: onRequest,
   });
 
 export const isStreamAvailableQuery = ({ chatflowid, apiHost = 'http://localhost:3000', onRequest }: MessageRequest) =>
   sendRequest<any>({
     method: 'GET',
-    url: `${apiHost}/api/v1/chatflows-streaming/${chatflowid}`,
+    url: `${apiHost}/api/v1/chat_buddy/chatflows-streaming/${chatflowid}`,
     onRequest: onRequest,
   });
 
 export const sendFileDownloadQuery = ({ apiHost = 'http://localhost:3000', body, onRequest }: MessageRequest) =>
   sendRequest<any>({
     method: 'POST',
-    url: `${apiHost}/api/v1/openai-assistants-file/download`,
+    url: `${apiHost}/api/v1/chat_buddy/openai-assistants-file/download`,
     body,
     type: 'blob',
     onRequest: onRequest,
@@ -131,7 +131,7 @@ export const sendFileDownloadQuery = ({ apiHost = 'http://localhost:3000', body,
 export const addLeadQuery = ({ apiHost = 'http://localhost:3000', body, onRequest }: LeadCaptureRequest) =>
   sendRequest<any>({
     method: 'POST',
-    url: `${apiHost}/api/v1/leads/`,
+    url: `${apiHost}/api/v1/chat_buddy/leads/`,
     body,
     onRequest: onRequest,
   });

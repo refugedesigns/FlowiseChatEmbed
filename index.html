@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    
+
+<script type="module">
+  import ChatBuddy from 'https://cdn.jsdelivr.net/gh/refugedesigns/FlowiseChatEmbed@latest/dist/web.js';
+  ChatBuddy.init({
+    chatflowId: "8c5dc381-4b62-4855-927d-a531cb468bab",
+    apiHost: "https://api.backgroundbuddy.io",
+    theme: {
+      button: {
+        backgroundColor: "#3f51b5",
+      },
+      tooltip: {
+        showTooltip: true,
+        tooltipMessage: "Chat with us 👋!",
+      },
+      chatWindow: {
+        showTitle: true,
+        title: "JOKA",
+        starterPrompts: [],
+        backgroundColor: "#FFFF",
+        welcomeMessage: "Hello! How can I assist you today?",
+        errorMessage: "We're unable to process your request. Please contact support.",
+        textInput: {
+          placeholder: 'Type your question here...',
+          maxChars: 500,
+          maxCharsWarningMessage: 'You have reached the maximum number of characters. Please input less than 500 characters.',
+          autoFocus: true,
+        },
+        botMessage: {
+          showAvatar: false,
+          avatarSrc: "",
+        },
+        titleAvatarSrc: "",
+      },
+    },
+  });
+</script>
+</body>
+</html>
