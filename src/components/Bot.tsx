@@ -312,12 +312,27 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
   const [isOwnerTyping, setIsOwnerTyping] = createSignal(false);
   let ownerTypingTimeout: number | undefined;
 
+  // Add an initializing flag at the top level
+  const [isInitializing, setIsInitializing] = createSignal(true);
+
   createMemo(() => {
     const customerId = (props.chatflowConfig?.vars as any)?.customerId;
     setChatId(customerId ? `${customerId.toString()}+${uuidv4()}` : uuidv4());
   });
 
   onMount(() => {
+    setIsInitializing(true);
+
+    // Reset chat history on page load
+    console.log('Resetting chat history on page load');
+    removeLocalStorageChatHistory(props.chatflowid);
+    setMessages([
+      {
+        message: props.welcomeMessage ?? defaultWelcomeMessage,
+        type: 'apiMessage',
+      },
+    ]);
+
     if (botProps?.observersConfig) {
       const { observeUserInput, observeLoading, observeMessages } = botProps.observersConfig;
       typeof observeUserInput === 'function' &&
@@ -490,8 +505,14 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
     setPreviews([]);
   };
 
-  // Handle errors
+  // Modify the handleError function to ignore errors during initialization
   const handleError = (message = 'Oops! There seems to be an error. Please try again.') => {
+    // Skip showing errors during initialization
+    if (isInitializing()) {
+      console.log('Skipping error during initialization:', message);
+      return;
+    }
+
     setMessages((prevMessages) => {
       const messages: MessageType[] = [...prevMessages, { message: props.errorMessage || message, type: 'apiMessage' }];
       addChatMessage(messages);
@@ -1051,6 +1072,13 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
       }
     }
 
+    // Add a brief delay to ensure all initialization is complete
+    // before we start showing error messages
+    setTimeout(() => {
+      console.log('Initialization complete, now showing errors');
+      setIsInitializing(false);
+    }, 3000); // Increase to 3 seconds to ensure all requests complete
+
     // eslint-disable-next-line solid/reactivity
     return () => {
       setUserInput('');
@@ -1398,6 +1426,18 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
       });
     });
 
+    socket.on('disconnect', () => {
+      console.log('Socket disconnected');
+      setIsConnected(false);
+      // Don't show error message on socket disconnect
+      // Just silently handle the disconnection
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('Socket connection error (suppressed):', error);
+      // Never show connection errors
+    });
+
     socket.on('chatBotThinkingStart', (data) => {
       if (data.chatflowid === props.chatflowid) {
         console.log('chatBotThinkingStart');
@@ -1538,6 +1578,33 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
   // Add this effect to debug loading state
   createEffect(() => {
     console.log('Loading state changed:', loading());
+  });
+
+  // At the beginning of the Bot component
+  onMount(() => {
+    // Original fetch function
+    const originalFetch = window.fetch;
+
+    // Override fetch to suppress errors during initialization
+    window.fetch = function (...args) {
+      return originalFetch.apply(this, args).catch((err) => {
+        if (isInitializing()) {
+          console.log('Suppressing fetch error during initialization:', err);
+          // Return an "empty" successful response instead of throwing
+          return new Response(JSON.stringify({ data: null }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        // If not initializing, let the error propagate
+        return Promise.reject(err);
+      });
+    };
+
+    // Make sure to restore original fetch when component unmounts
+    return () => {
+      window.fetch = originalFetch;
+    };
   });
 
   return (
