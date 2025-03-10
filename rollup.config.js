@@ -9,7 +9,7 @@ import typescript from '@rollup/plugin-typescript';
 import { typescriptPaths } from 'rollup-plugin-typescript-paths';
 import commonjs from '@rollup/plugin-commonjs';
 import { uglify } from 'rollup-plugin-uglify';
-import serve from 'rollup-plugin-serve';
+import dev from 'rollup-plugin-dev';
 import livereload from 'rollup-plugin-livereload';
 
 const isDev = process.env.NODE_ENV === 'development';
@@ -40,19 +40,13 @@ const indexConfig = {
     typescript(),
     typescriptPaths({ preserveExtensions: true }),
     terser({ output: { comments: false } }),
-    ...(isDev
-      ? [
-          serve({
-            open: true,
-            verbose: true,
-            contentBase: ['dist', 'public'],
-            host: 'localhost',
-            port: 5678,
-          }),
-          livereload({ watch: 'dist' }),
-        ]
-      : []), // Add serve/livereload only in development
-  ],
+    isDev && dev({
+      dirs: ['dist', 'public'],
+      port: 5678,
+      spa: true
+    }),
+    isDev && livereload({ watch: 'dist' }),
+  ].filter(Boolean),
 };
 
 const configs = [

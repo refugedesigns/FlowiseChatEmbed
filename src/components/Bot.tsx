@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For, onMount, Show, mergeProps, on, createMemo } from 'solid-js';
+import { createSignal, createEffect, For, onMount, Show, mergeProps, on, createMemo, batch } from 'solid-js';
 import { v4 as uuidv4 } from 'uuid';
 import {
   sendMessageQuery,
@@ -36,6 +36,7 @@ import { removeLocalStorageChatHistory, getLocalStorageChatflow, setLocalStorage
 import { cloneDeep } from 'lodash';
 import { FollowUpPromptBubble } from '@/components/bubbles/FollowUpPromptBubble';
 import { fetchEventSource, EventStreamContentType } from '@microsoft/fetch-event-source';
+import { io, Socket } from 'socket.io-client';
 
 export type FileEvent<T = EventTarget> = {
   target: T;
@@ -171,7 +172,7 @@ const defaultWelcomeMessage = 'Hi there! How can I help?';
 
 /*const sourceDocuments = [
     {
-        "pageContent": "I know some are talking about “living with COVID-19”. Tonight – I say that we will never just accept living with COVID-19. \r\n\r\nWe will continue to combat the virus as we do other diseases. And because this is a virus that mutates and spreads, we will stay on guard. \r\n\r\nHere are four common sense steps as we move forward safely.  \r\n\r\nFirst, stay protected with vaccines and treatments. We know how incredibly effective vaccines are. If you’re vaccinated and boosted you have the highest degree of protection. \r\n\r\nWe will never give up on vaccinating more Americans. Now, I know parents with kids under 5 are eager to see a vaccine authorized for their children. \r\n\r\nThe scientists are working hard to get that done and we’ll be ready with plenty of vaccines when they do. \r\n\r\nWe’re also ready with anti-viral treatments. If you get COVID-19, the Pfizer pill reduces your chances of ending up in the hospital by 90%.",
+        "pageContent": "I know some are talking about "living with COVID-19". Tonight – I say that we will never just accept living with COVID-19. \r\n\r\nWe will continue to combat the virus as we do other diseases. And because this is a virus that mutates and spreads, we will stay on guard. \r\n\r\nHere are four common sense steps as we move forward safely.  \r\n\r\nFirst, stay protected with vaccines and treatments. We know how incredibly effective vaccines are. If you're vaccinated and boosted you have the highest degree of protection. \r\n\r\nWe will never give up on vaccinating more Americans. Now, I know parents with kids under 5 are eager to see a vaccine authorized for their children. \r\n\r\nThe scientists are working hard to get that done and we'll be ready with plenty of vaccines when they do. \r\n\r\nWe're also ready with anti-viral treatments. If you get COVID-19, the Pfizer pill reduces your chances of ending up in the hospital by 90%.",
         "metadata": {
           "source": "blob",
           "blobType": "",
@@ -184,7 +185,7 @@ const defaultWelcomeMessage = 'Hi there! How can I help?';
         }
     },
     {
-        "pageContent": "sistance,  and  polishing  [65].  For  instance,  AI  tools  generate\nsuggestions based on inputting keywords or topics. The tools\nanalyze  search  data,  trending  topics,  and  popular  queries  to\ncreate  fresh  content.  What’s  more,  AIGC  assists  in  writing\narticles and posting blogs on specific topics. While these tools\nmay not be able to produce high-quality content by themselves,\nthey can provide a starting point for a writer struggling with\nwriter’s block.\nH.  Cons of AIGC\nOne of the main concerns among the public is the potential\nlack  of  creativity  and  human  touch  in  AIGC.  In  addition,\nAIGC sometimes lacks a nuanced understanding of language\nand context, which may lead to inaccuracies and misinterpre-\ntations. There are also concerns about the ethics and legality\nof using AIGC, particularly when it results in issues such as\ncopyright  infringement  and  data  privacy.  In  this  section,  we\nwill discuss some of the disadvantages of AIGC (Table IV).",
+        "pageContent": "sistance,  and  polishing  [65].  For  instance,  AI  tools  generate\nsuggestions based on inputting keywords or topics. The tools\nanalyze  search  data,  trending  topics,  and  popular  queries  to\ncreate  fresh  content.  What's  more,  AIGC  assists  in  writing\narticles and posting blogs on specific topics. While these tools\nmay not be able to produce high-quality content by themselves,\nthey can provide a starting point for a writer struggling with\nwriter's block.\nH.  Cons of AIGC\nOne of the main concerns among the public is the potential\nlack  of  creativity  and  human  touch  in  AIGC.  In  addition,\nAIGC sometimes lacks a nuanced understanding of language\nand context, which may lead to inaccuracies and misinterpre-\ntations. There are also concerns about the ethics and legality\nof using AIGC, particularly when it results in issues such as\ncopyright  infringement  and  data  privacy.  In  this  section,  we\nwill discuss some of the disadvantages of AIGC (Table IV).",
         "metadata": {
           "source": "blob",
           "blobType": "",
@@ -301,6 +302,16 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
   const [isDragActive, setIsDragActive] = createSignal(false);
   const [uploadedFiles, setUploadedFiles] = createSignal<{ file: File; type: string }[]>([]);
 
+  let socket: Socket | undefined;
+  const [isConnected, setIsConnected] = createSignal(false);
+
+  // At the top with other signals
+  const [socketEvents, setSocketEvents] = createSignal<{ type: string; data: any }[]>([]);
+
+  // Add state to track if owner is typing
+  const [isOwnerTyping, setIsOwnerTyping] = createSignal(false);
+  let ownerTypingTimeout: number | undefined;
+
   createMemo(() => {
     const customerId = (props.chatflowConfig?.vars as any)?.customerId;
     setChatId(customerId ? `${customerId.toString()}+${uuidv4()}` : uuidv4());
@@ -330,6 +341,11 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
     setTimeout(() => {
       chatContainer?.scrollTo(0, chatContainer.scrollHeight);
     }, 50);
+
+    initializeSocket();
+    return () => {
+      cleanupSocket();
+    };
   });
 
   const scrollToBottom = () => {
@@ -735,7 +751,6 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
       }
     }
 
-    setLoading(true);
     scrollToBottom();
 
     let uploads: IUploads = previews().map((item) => {
@@ -819,11 +834,11 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
 
         updateMetadata(data, value);
 
-        setLoading(false);
         setUserInput('');
         setUploadedFiles([]);
         scrollToBottom();
       }
+
       if (result.error) {
         const error = result.error;
         console.error(error);
@@ -1362,6 +1377,169 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
     }
   };
 
+  const initializeSocket = () => {
+    if (!props.apiHost) return;
+
+    socket = io(props.apiHost, {
+      transports: ['websocket'],
+      path: '/socket.io',
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    socket.on('connect', () => {
+      console.log('Socket connected');
+      setIsConnected(true);
+      socket?.emit('join', {
+        chatflowid: props.chatflowid,
+        chatId: chatId(),
+      });
+    });
+
+    socket.on('chatBotThinkingStart', (data) => {
+      if (data.chatflowid === props.chatflowid) {
+        console.log('chatBotThinkingStart');
+        batch(() => {
+          setLoading(true);
+          scrollToBottom();
+        });
+      }
+    });
+
+    socket.on('chatBotThinkingEnd', (data) => {
+      if (data.chatflowid === props.chatflowid) {
+        console.log('chatBotThinkingEnd');
+        batch(() => {
+          setLoading(false);
+          scrollToBottom();
+        });
+      }
+    });
+
+    // Use debounced approach for typing events
+    socket.on('recieveOwnerTypingStart', (data) => {
+      if (data.chatflowid === props.chatflowid) {
+        console.log('receiveOwnerTypingStart');
+
+        // Clear any pending timeout
+        if (ownerTypingTimeout) {
+          clearTimeout(ownerTypingTimeout);
+          ownerTypingTimeout = undefined;
+        }
+
+        // Force loading state to true and log it
+        console.log('Setting loading to true');
+        setIsOwnerTyping(true);
+        setLoading(true);
+        scrollToBottom();
+      }
+    });
+
+    socket.on('recieveOwnerTypingEnd', (data) => {
+      if (data.chatflowid === props.chatflowid) {
+        console.log('receiveOwnerTypingEnd');
+
+        // Increase debounce time
+        if (ownerTypingTimeout) {
+          clearTimeout(ownerTypingTimeout);
+        }
+
+        ownerTypingTimeout = window.setTimeout(() => {
+          console.log('Timeout expired, setting loading to false');
+          setIsOwnerTyping(false);
+          setLoading(false);
+          scrollToBottom();
+          ownerTypingTimeout = undefined;
+        }, 1000); // Increased to 1000ms
+      }
+    });
+
+    socket.on("clientDataSaved", (data) => {
+      if (data.chatflowid === props.chatflowid) {
+        console.log('clientDataSaved', data);
+        setUserInput('');
+        setUploadedFiles([]);
+        scrollToBottom();
+      }
+    });
+
+    socket.on('newOwnerMessage', (data) => {
+      if (data.chatflowid === props.chatflowid) {
+        console.log('newOwnerMessage received:', data);
+
+        createEffect(() => {
+          let text = '';
+          if (data.text) text = data.text;
+          else if (data.json) text = JSON.stringify(data.json, null, 2);
+          else text = JSON.stringify(data, null, 2);
+
+          if (data?.chatId) setChatId(data.chatId);
+
+          playReceiveSound();
+
+          setMessages((prevMessages) => {
+            const allMessages = [...cloneDeep(prevMessages)];
+            const newMessage = {
+              message: text,
+              id: data?.chatMessageId,
+              sourceDocuments: data?.sourceDocuments,
+              usedTools: data?.usedTools,
+              fileAnnotations: data?.fileAnnotations,
+              agentReasoning: data?.agentReasoning,
+              action: data?.action,
+              artifacts: data?.artifacts,
+              type: 'apiMessage' as messageType,
+              feedback: null,
+              dateTime: new Date().toISOString(),
+            };
+            allMessages.push(newMessage);
+            addChatMessage(allMessages);
+            return allMessages;
+          });
+
+          updateMetadata(data, '');
+          setLoading(false);
+          setUserInput('');
+          setUploadedFiles([]);
+          scrollToBottom();
+        });
+      }
+    });
+  };
+
+  const cleanupSocket = () => {
+    if (socket) {
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('error');
+      socket.off('newOwnerMessage');
+      socket.off('recieveOwnerTypingStart');
+      socket.off('recieveOwnerTypingEnd');
+      socket.disconnect();
+    }
+
+    // Clear any pending timeout
+    if (ownerTypingTimeout) {
+      clearTimeout(ownerTypingTimeout);
+      ownerTypingTimeout = undefined;
+    }
+  };
+
+  // Update socket connection when apiHost changes
+  createEffect(() => {
+    if (props.apiHost) {
+      cleanupSocket();
+      initializeSocket();
+    }
+  });
+
+  // Add this effect to debug loading state
+  createEffect(() => {
+    console.log('Loading state changed:', loading());
+  });
+
   return (
     <>
       <div
@@ -1496,12 +1674,15 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
                         setLeadEmail={setLeadEmail}
                       />
                     )}
-                    {message.type === 'userMessage' && loading() && index() === messages().length - 1 && <LoadingBubble />}
-                    {message.type === 'apiMessage' && message.message === '' && loading() && index() === messages().length - 1 && <LoadingBubble />}
                   </>
                 );
               }}
             </For>
+            <Show when={loading() && !messages().some((m) => m.message === '' && m.type === 'apiMessage')}>
+              <div class="w-full flex justify-start p-2">
+                <LoadingBubble />
+              </div>
+            </Show>
           </div>
           <Show when={messages().length === 1}>
             <Show when={starterPrompts().length > 0}>
