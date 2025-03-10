@@ -40,11 +40,12 @@ const indexConfig = {
     typescript(),
     typescriptPaths({ preserveExtensions: true }),
     terser({ output: { comments: false } }),
-    isDev && dev({
-      dirs: ['dist', 'public'],
-      port: 5678,
-      spa: true
-    }),
+    isDev &&
+      dev({
+        dirs: ['dist', 'public'],
+        port: 5678,
+        spa: true,
+      }),
     isDev && livereload({ watch: 'dist' }),
   ].filter(Boolean),
 };

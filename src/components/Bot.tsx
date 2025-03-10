@@ -1456,7 +1456,7 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
       }
     });
 
-    socket.on("clientDataSaved", (data) => {
+    socket.on('clientDataSaved', (data) => {
       if (data.chatflowid === props.chatflowid) {
         console.log('clientDataSaved', data);
         setUserInput('');
