@@ -583,84 +583,98 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
     const chatId = params.chatId;
     const input = params.question;
     params.streaming = true;
-    fetchEventSource(`${props.apiHost}/api/v1/prediction/${chatflowid}`, {
-      openWhenHidden: true,
-      method: 'POST',
-      body: JSON.stringify(params),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      async onopen(response) {
-        if (response.ok && response.headers.get('content-type')?.startsWith(EventStreamContentType)) {
-          return; // everything's good
-        } else if (response.status === 429) {
-          const errMessage = (await response.text()) ?? 'Too many requests. Please try again later.';
-          handleError(errMessage);
-          throw new Error(errMessage);
-        } else if (response.status === 403) {
-          const errMessage = (await response.text()) ?? 'Unauthorized';
-          handleError(errMessage);
-          throw new Error(errMessage);
-        } else if (response.status === 401) {
-          const errMessage = (await response.text()) ?? 'Unauthenticated';
-          handleError(errMessage);
-          throw new Error(errMessage);
-        } else {
-          throw new Error();
-        }
-      },
-      async onmessage(ev) {
-        const payload = JSON.parse(ev.data);
-        switch (payload.event) {
-          case 'start':
-            setMessages((prevMessages) => [...prevMessages, { message: '', type: 'apiMessage' }]);
-            break;
-          case 'token':
-            updateLastMessage(payload.data);
-            break;
-          case 'sourceDocuments':
-            updateLastMessageSourceDocuments(payload.data);
-            break;
-          case 'usedTools':
-            updateLastMessageUsedTools(payload.data);
-            break;
-          case 'fileAnnotations':
-            updateLastMessageFileAnnotations(payload.data);
-            break;
-          case 'agentReasoning':
-            updateLastMessageAgentReasoning(payload.data);
-            break;
-          case 'action':
-            updateLastMessageAction(payload.data);
-            break;
-          case 'artifacts':
-            updateLastMessageArtifacts(payload.data);
-            break;
-          case 'metadata':
-            updateMetadata(payload.data, input);
-            break;
-          case 'error':
-            updateErrorMessage(payload.data);
-            break;
-          case 'abort':
-            abortMessage();
+
+    // Add retry logic
+    const maxRetries = 3;
+    let currentTry = 0;
+
+    while (currentTry < maxRetries) {
+      try {
+        await fetchEventSource(`${props.apiHost}/api/v1/prediction/${chatflowid}`, {
+          openWhenHidden: true,
+          method: 'POST',
+          body: JSON.stringify(params),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          async onopen(response) {
+            if (response.ok && response.headers.get('content-type')?.startsWith(EventStreamContentType)) {
+              return; // everything's good
+            } else if (!response.ok) {
+              // Don't show error message for any connection issues
+              console.log('Connection issue, retrying...');
+              throw new Error('Connection issue');
+            }
+          },
+          onmessage(ev) {
+            try {
+              const payload = JSON.parse(ev.data);
+              switch (payload.event) {
+                case 'start':
+                  setMessages((prevMessages) => [...prevMessages, { message: '', type: 'apiMessage' }]);
+                  break;
+                case 'token':
+                  updateLastMessage(payload.data);
+                  break;
+                case 'sourceDocuments':
+                  updateLastMessageSourceDocuments(payload.data);
+                  break;
+                case 'usedTools':
+                  updateLastMessageUsedTools(payload.data);
+                  break;
+                case 'fileAnnotations':
+                  updateLastMessageFileAnnotations(payload.data);
+                  break;
+                case 'agentReasoning':
+                  updateLastMessageAgentReasoning(payload.data);
+                  break;
+                case 'action':
+                  updateLastMessageAction(payload.data);
+                  break;
+                case 'artifacts':
+                  updateLastMessageArtifacts(payload.data);
+                  break;
+                case 'metadata':
+                  updateMetadata(payload.data, input);
+                  break;
+                case 'error':
+                  updateErrorMessage(payload.data);
+                  break;
+                case 'abort':
+                  abortMessage();
+                  closeResponse();
+                  break;
+                case 'end':
+                  setLocalStorageChatflow(chatflowid, chatId);
+                  closeResponse();
+                  break;
+              }
+            } catch (err) {
+              console.error('Error parsing message:', err);
+            }
+          },
+          onclose() {
             closeResponse();
-            break;
-          case 'end':
-            setLocalStorageChatflow(chatflowid, chatId);
+          },
+          onerror(err) {
+            // Don't show any error messages, just log to console
+            console.error('EventSource Error:', err);
             closeResponse();
-            break;
-        }
-      },
-      async onclose() {
-        closeResponse();
-      },
-      onerror(err) {
-        console.error('EventSource Error: ', err);
-        closeResponse();
-        throw err;
-      },
-    });
+            throw err;
+          },
+        });
+
+        // If we get here, the request was successful
+        break;
+      } catch (err) {
+        currentTry++;
+        // Only log to console, don't show errors in chat
+        console.log(`Connection attempt ${currentTry} failed:`, err);
+
+        // Wait before retrying
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
   };
 
   const closeResponse = () => {
