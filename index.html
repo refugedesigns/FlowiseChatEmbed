@@ -8,10 +8,11 @@
 <body>
     
 
+
 <script type="module">
-    import ChatBuddy from './dist/web.js';
+  import ChatBuddy from 'https://cdn.jsdelivr.net/gh/refugedesigns/FlowiseChatEmbed@latest/dist/web.js';
   ChatBuddy.init({
-    chatflowid: "29ee9efe-b857-4734-ac25-4d55d6a5fb8f",
+    chatflowid: "156a0660-d5cd-48f8-8342-5fdb050ec123",
     apiHost: "http://localhost:5000",
     theme: {
       button: {
@@ -23,10 +24,11 @@
       },
       chatWindow: {
         showTitle: true,
-        title: "JOKA",
+        title: "Background Buddy",
         starterPrompts: [],
         backgroundColor: "#FFFF",
         welcomeMessage: "Hello! How can I assist you today?",
+        errorMessage: "We're unable to process your request. Please contact support.",
         textInput: {
           placeholder: 'Type your question here...',
           maxChars: 500,

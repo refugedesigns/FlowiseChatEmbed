@@ -323,9 +323,6 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
   onMount(() => {
     setIsInitializing(true);
 
-    // Reset chat history on page load
-    console.log('Resetting chat history on page load');
-    removeLocalStorageChatHistory(props.chatflowid);
     setMessages([
       {
         message: props.welcomeMessage ?? defaultWelcomeMessage,
@@ -931,7 +928,9 @@ export const Bot = (botProps: BotProps & { class?: string }) => {
     try {
       removeLocalStorageChatHistory(props.chatflowid);
       setChatId(
-        (props.chatflowConfig?.vars as any)?.customerId ? `${(props.chatflowConfig?.vars as any).customerId.toString()}+${uuidv4()}` : uuidv4(),
+        (props.chatflowConfig?.vars as any)?.customerId 
+          ? `${(props.chatflowConfig?.vars as any).customerId.toString()}+${uuidv4()}` 
+          : uuidv4()
       );
       setUploadedFiles([]);
       const messages: MessageType[] = [
